@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/csv"
+	"math/big"
 
 	"github.com/algorand/falcon"
 	"github.com/cloudflare/circl/sign/dilithium"
@@ -40,6 +41,8 @@ type key struct {
 	curve      elliptic.Curve
 	PrivateKey crypto.PrivateKey
 	PublicKey  crypto.PublicKey
+	R          *big.Int
+	S          *big.Int
 }
 
 type kyberkey struct {
@@ -142,7 +145,7 @@ func main() {
 		pubKey := privKey.Public()
 		elapsed := time.Since(start).Nanoseconds()
 		records = append(records, newRecord(id, recordType, elapsed, "", "", "", ""))
-		keyStore[j] = key{curve, privKey, pubKey}
+		keyStore[j] = key{curve, privKey, pubKey, nil, nil}
 	}
 
 	for k := 0; k < iterations; k++ {
@@ -155,8 +158,19 @@ func main() {
 			log.Fatalf("failed to convert private key to *ecdsa.PrivateKey")
 		}
 		r, s, _ := ecdsa.Sign(rand.Reader, privateKey, byteTest)
-		_ = r
-		_ = s
+		elapsed := time.Since(start).Nanoseconds()
+		records = append(records, newRecord(id, recordType, elapsed, "", "", "", ""))
+		keyStore[k] = key{keyStore[k].curve, keyStore[k].PrivateKey, keyStore[k].PublicKey, r, s}
+	}
+
+	for k := 0; k < iterations; k++ {
+
+		id := uuid.New().String()
+		start := time.Now()
+		recordType = "ECDSA_verify"
+		publicKey, _ := keyStore[k].PublicKey.(*ecdsa.PublicKey)
+		signVerified := ecdsa.Verify(publicKey, byteTest, keyStore[k].R, keyStore[k].S)
+		_ = signVerified
 		elapsed := time.Since(start).Nanoseconds()
 		records = append(records, newRecord(id, recordType, elapsed, "", "", "", ""))
 	}
